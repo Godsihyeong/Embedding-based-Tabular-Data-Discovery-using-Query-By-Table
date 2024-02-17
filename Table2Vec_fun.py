@@ -107,9 +107,10 @@ def list2vector(lst):
 #### Weights ###
 #### Weights ###
 
-class Weights:
-    def __init__(self, query_df):
+class Weights_smoothing:
+    def __init__(self, query_df, k = 0.1):
         self.query_df = query_df
+        self.k = k
 
     def h2h(self, table_df):
         # 각 dataframe의 columns을 list로 생성
@@ -129,45 +130,70 @@ class Weights:
                 similar_sum += similarity(table_col_vector[i], query_col_vector[j])
             cos_list.append(similar_sum)
 
-        if sum(cos_list) != 0:
-            return [round(weight/sum(cos_list), 4) for weight in cos_list]
+        if 0 in cos_list:
+            if sum(cos_list) == 0:
+                return [1 for _ in range(len(cos_list))]
+            else:
+                weights = [round(cos/sum(cos_list), 4) for cos in cos_list]
+                
+                smooth_weights = []
+                length = len(weights)
+                
+                for weight in weights:
+                    if weight != 0:
+                        smooth_weights.append(weight * (1-self.k) + self.k / length)
+                    else:
+                        smooth_weights.append(self.k / length)
+                        
+                return smooth_weights
+        
         else:
-            return [0 for _ in range(len(cos_list))]
-
+            return [round(cos/sum(cos_list), 4) for cos in cos_list]
+            
     def h2t(self, table_df):
-        # query column 호출
         query_columns = list(self.query_df.columns)
-        # query columns 벡터화
-        query_column_vectors = list2vector(query_columns)
-
-        # table column 호출
+        query_col_vectors = list2vector(query_columns)
+        
         table_columns = list(table_df.columns)
-
-        table_column_vectors = list2vector(table_columns)
-
+        table_col_vectors = list2vector(table_columns)
+        
         cos_list = []
-
-        # table_df 전처리
+        
         table_df = table_df.applymap(lambda x: re.sub(r'[-:.,&]', '', x) if isinstance(x, str) else x)
         table_df = table_df.applymap(lambda x: re.sub(r'\([^)]*\)', '', x) if isinstance(x, str) else x)
 
         for i in range(len(table_columns)):
-            compare_column = list2vector(list(table_df[table_columns[i]]))
-            compare_column = table_column_vectors[i] + compare_column
-            compare_column_sum = sum(compare_column)
-
             cos_sum = 0
-
-            for query in query_column_vectors:
-                cos_sum += similarity(compare_column_sum, query)
-
+            
+            compare_columns = list2vector(list(table_df[table_columns[i]]))
+            compare_columns = table_col_vectors[i] + compare_columns
+            
+            for query in query_col_vectors:
+                temp = [similarity(query, n_table_columns) for n_table_columns in compare_columns]
+                cos_sum += sum(temp)
+                
             cos_list.append(cos_sum)
-
-        if sum(cos_list) != 0:
-            return [round(weight/sum(cos_list), 4) for weight in cos_list]
+                
+        if 0 in cos_list:
+            if sum(cos_list) == 0:
+                return [1 for _ in range(len(cos_list))]
+            else:
+                weights = [round(cos/sum(cos_list), 4) for cos in cos_list]
+                
+                smooth_weights = []
+                length = len(weights)
+                
+                for weight in weights:
+                    if weight != 0:
+                        smooth_weights.append(weight * (1-self.k) + self.k / length)
+                    else:
+                        smooth_weights.append(self.k / length)
+                        
+                return smooth_weights
+        
         else:
-            return [0 for _ in range(len(cos_list))]
-
+            return [round(cos/sum(cos_list), 4) for cos in cos_list]
+        
 #### fusion ###
 #### fusion ###
 #### fusion ###
@@ -209,12 +235,9 @@ class Fusion:
 
         else:
             return 'category를 다시 지정해주세요.'
-
-#### Weights using smoothing ###
-#### Weights using smoothing ###
-#### Weights using smoothing ###
-
-class Weights_smoothing:
+        
+        
+class Weights:
     def __init__(self, query_df):
         self.query_df = query_df
 
@@ -226,7 +249,7 @@ class Weights_smoothing:
         query_col_vector = list2vector(query_columns)
         table_col_vector = list2vector(table_columns)
 
-        cos_list = [1/len(query_columns) for _ in range(len(table_columns))]
+        cos_list = []
 
         # query column vector의 i번째 요소가
         for i in range(len(table_col_vector)):
@@ -234,42 +257,37 @@ class Weights_smoothing:
             # table column vector의 요소들과 얼마나 유사한지 유사도 계산해서 총합
             for j in range(len(query_col_vector)):
                 similar_sum += similarity(table_col_vector[i], query_col_vector[j])
-            cos_list[i] += similar_sum
+            cos_list.append(similar_sum)
 
         if sum(cos_list) != 0:
             return [round(weight/sum(cos_list), 4) for weight in cos_list]
         else:
             return [0 for _ in range(len(cos_list))]
-        
+
     def h2t(self, table_df):
-        # query column 호출
         query_columns = list(self.query_df.columns)
-        # query columns 벡터화
-        query_column_vectors = list2vector(query_columns)
-
-        # table column 호출
+        query_col_vectors = list2vector(query_columns)
+        
         table_columns = list(table_df.columns)
-
-        table_column_vectors = list2vector(table_columns)
-
-        cos_list = [1/len(table_columns) for _ in range(len(table_columns))]
-
-        # table_df 전처리
+        table_col_vectors = list2vector(table_columns)
+        
+        cos_list = []
+        
         table_df = table_df.applymap(lambda x: re.sub(r'[-:.,&]', '', x) if isinstance(x, str) else x)
         table_df = table_df.applymap(lambda x: re.sub(r'\([^)]*\)', '', x) if isinstance(x, str) else x)
 
         for i in range(len(table_columns)):
-            compare_column = list2vector(list(table_df[table_columns[i]]))
-            compare_column = table_column_vectors[i] + compare_column
-            compare_column_sum = sum(compare_column)
-
             cos_sum = 0
-
-            for query in query_column_vectors:
-                cos_sum += similarity(compare_column_sum, query)
-
-            cos_list[i] += cos_sum
-
+            
+            compare_columns = list2vector(list(table_df[table_columns[i]]))
+            compare_columns = table_col_vectors[i] + compare_columns
+            
+            for query in query_col_vectors:
+                temp = [similarity(query, n_table_columns) for n_table_columns in compare_columns]
+                cos_sum += sum(temp)
+                
+            cos_list.append(cos_sum)
+                
         if sum(cos_list) != 0:
             return [round(weight/sum(cos_list), 4) for weight in cos_list]
         else:
