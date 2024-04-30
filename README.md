@@ -1,4 +1,4 @@
-# Table2Vec
+# Query By Table
 
 ```
 To retrieve tabular datas similar with a query tabular data, vectorize each data  
